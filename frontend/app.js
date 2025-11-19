@@ -1,121 +1,178 @@
-function PDFComplianceChecker() {
+function App() {
   const [file, setFile] = React.useState(null);
-  const [rules, setRules] = React.useState(['', '', '']);
+  const [rules, setRules] = React.useState(["", "", ""]);
   const [results, setResults] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState('');
+  const [error, setError] = React.useState("");
 
   const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile && selectedFile.type === "application/pdf") {
-      setFile(selectedFile);
+    const f = e.target.files[0];
+    if (f && f.type === "application/pdf") {
+      setFile(f);
       setError("");
     } else {
-      setError("Please upload a valid PDF file");
+      setError("Please upload a valid PDF file.");
     }
   };
 
-  async function extractPDFBackend(file) {
-    const formData = new FormData();
-    formData.append("pdf", file);
+  async function extractPDF() {
+    const fd = new FormData();
+    fd.append("pdf", file);
 
     const res = await fetch("http://localhost:3000/api/extract-pdf", {
       method: "POST",
-      body: formData
+      body: fd,
     });
 
     const data = await res.json();
     return data.text;
   }
 
-  async function checkRulesBackend(text, rules) {
+  async function checkRule(text, rule) {
     const res = await fetch("http://localhost:3000/api/check-rules", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ text, rules })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, rules: [rule] }),
     });
 
-    return await res.json();
+    const data = await res.json();
+   if (!data || !data.results || !data.results[0]) {
+  return {
+    rule,
+    status: "fail",
+    evidence: "No response from backend",
+    reasoning: "Backend returned invalid structure",
+    confidence: 0
+  };
+}
+return data.results[0];
+
   }
 
-  const checkDocument = async () => {
-    if (!file) return setError("Upload a PDF first");
-
-    const actualRules = rules.filter(r => r.trim() !== "");
-    if (actualRules.length === 0) return setError("Enter at least 1 rule");
+  async function checkDocument() {
+    if (!file) return setError("Upload a PDF.");
+    if (!rules.some((r) => r.trim() !== ""))
+      return setError("Enter at least one rule.");
 
     setLoading(true);
     setError("");
     setResults(null);
 
     try {
-      const text = await extractPDFBackend(file);
-      const data = await checkRulesBackend(text, actualRules);
-      setResults(data.results);
-    } catch (err) {
-      setError("Error: " + err.message);
-    } finally {
-      setLoading(false);
+      const text = await extractPDF();
+      const output = await Promise.all(
+        rules.filter((x) => x.trim()).map((r) => checkRule(text, r))
+      );
+      setResults(output);
+    } catch (e) {
+      setError("Something went wrong: " + e.message);
     }
-  };
+
+    setLoading(false);
+  }
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 bg-white p-8 rounded-lg shadow-lg">
-      <h1 className="text-3xl font-bold mb-6 text-center">PDF Compliance Checker</h1>
+    <div className="flex justify-center items-center py-12 px-4">
+      <div className="w-full max-w-3xl p-8 backdrop-blur-xl bg-white/40 shadow-2xl rounded-3xl border border-white/30">
 
-      {/* Upload */}
-      <div className="mb-6">
-        <input type="file" accept="application/pdf" onChange={handleFileChange} />
-      </div>
+        {/* Header */}
+        <h1 className="text-4xl font-extrabold text-indigo-700 text-center mb-8">
+          PDF Compliance Checker
+        </h1>
 
-      {/* Rules */}
-      <div className="mb-6">
-        <h2 className="font-semibold mb-2">Enter Your Rules</h2>
-        {rules.map((rule, index) => (
-          <input
-            key={index}
-            className="w-full p-2 mb-2 border rounded"
-            placeholder={`Rule ${index + 1}`}
-            value={rule}
-            onChange={(e) => {
-              const updated = [...rules];
-              updated[index] = e.target.value;
-              setRules(updated);
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Button */}
-      <button
-        onClick={checkDocument}
-        className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold"
-        disabled={loading}
-      >
-        {loading ? "Checking..." : "Check Document"}
-      </button>
-
-      {/* error */}
-      {error && <p className="text-red-600 mt-4">{error}</p>}
-
-      {/* Results */}
-      {results && (
-        <div className="mt-8">
-          <h2 className="text-xl font-bold mb-4">Results</h2>
-
-          {results.map((r, i) => (
-            <div key={i} className="border p-4 rounded mb-2">
-              <p><b>Rule:</b> {r.rule}</p>
-              <p><b>Status:</b> {r.status}</p>
-              <p><b>Evidence:</b> {r.evidence}</p>
-              <p><b>Reasoning:</b> {r.reasoning}</p>
-              <p><b>Confidence:</b> {r.confidence}</p>
-            </div>
-          ))}
+        {/* Upload Section */}
+        <div className="mb-8">
+          <label className="font-semibold text-lg">1. Upload PDF</label>
+          <div className="mt-3 bg-white p-6 border-2 border-dashed rounded-xl text-center cursor-pointer hover:border-indigo-500 transition">
+            <input
+              type="file"
+              accept="application/pdf"
+              id="file"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <label htmlFor="file" className="cursor-pointer text-indigo-600 font-semibold">
+              {file ? file.name : "Click here to upload your PDF"}
+            </label>
+          </div>
         </div>
-      )}
+
+        {/* Rules */}
+        <div className="mb-8">
+          <label className="font-semibold text-lg">2. Enter Rules</label>
+          <div className="mt-3 space-y-3">
+            {rules.map((r, i) => (
+              <input
+                key={i}
+                value={r}
+                onChange={(e) => {
+                  const arr = [...rules];
+                  arr[i] = e.target.value;
+                  setRules(arr);
+                }}
+                placeholder={`Rule ${i + 1}`}
+                className="w-full p-3 rounded-lg border-2 border-gray-300 focus:border-indigo-500"
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Button */}
+        <button
+          onClick={checkDocument}
+          disabled={loading}
+          className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-lg transition"
+        >
+          {loading ? "Analyzing..." : "Check Document"}
+        </button>
+
+        {error && (
+          <p className="mt-4 p-3 bg-red-200 text-red-800 font-semibold rounded-lg">
+            {error}
+          </p>
+        )}
+
+        {/* Results */}
+        {results && (
+          <div className="mt-10">
+            <h2 className="text-2xl font-bold text-indigo-700 mb-4">
+              Analysis Results
+            </h2>
+
+            <div className="space-y-4">
+              {results.map((r, i) => (
+                <div key={i} className="p-5 bg-white rounded-xl shadow border">
+                  <p className="font-bold text-lg">
+                    Rule: <span className="text-indigo-700">{r.rule}</span>
+                  </p>
+                  <p>
+                    Status:{" "}
+                    <span
+                      className={
+                        r.status === "pass"
+                          ? "text-green-600 font-bold"
+                          : "text-red-600 font-bold"
+                      }
+                    >
+                      {r.status}
+                    </span>
+                  </p>
+                  <p className="italic text-gray-700 mt-1">
+                    Evidence: "{r.evidence}"
+                  </p>
+                  <p className="text-gray-800 mt-1">{r.reasoning}</p>
+                  <p className="font-bold mt-2">
+                    Confidence:{" "}
+                    <span className="text-indigo-700">{r.confidence}%</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-ReactDOM.render(<PDFComplianceChecker />, document.getElementById("root"));
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
